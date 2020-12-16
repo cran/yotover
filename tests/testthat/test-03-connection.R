@@ -1,5 +1,5 @@
 olddir <- Sys.getenv("YOTOV_DB_DIR")
-Sys.setenv(YOTOV_DB_DIR = normalizePath(file.path(getwd(), "localdb"),
+Sys.setenv(YOTOV_DB_DIR = normalizePath(file.path(getwd(), "yotover"),
                                         mustWork = FALSE
 ))
 
@@ -29,5 +29,5 @@ test_that("Tables fail when database is deleted", {
   }
 })
 
-unlink(Sys.getenv("YOTOV_DB_DIR"), recursive = TRUE)
+try(unlink(Sys.getenv("YOTOV_DB_DIR"), recursive = TRUE))
 Sys.setenv(YOTOV_DB_DIR = olddir)

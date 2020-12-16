@@ -1,11 +1,14 @@
 #' @importFrom rappdirs user_data_dir
+#' @importFrom utils packageVersion
 yotov_path <- function() {
+  duckdb_version <- utils::packageVersion('duckdb')
   sys_yotover_path <- Sys.getenv("yotover_DB_DIR")
   sys_yotover_path <- gsub("\\\\", "/", sys_yotover_path)
   if (sys_yotover_path == "") {
-    return(gsub("\\\\", "/", paste0(rappdirs::user_data_dir(), "/yotover")))
+    return(gsub("\\\\", "/", paste0(rappdirs::user_data_dir(),
+                                    "/yotover/duckdb-", duckdb_version)))
   } else {
-    return(gsub("\\\\", "/", sys_yotover_path))
+    return(gsub("\\\\", "/", paste0(sys_yotover_path, "/duckdb-", duckdb_version)))
   }
 }
 
@@ -111,7 +114,6 @@ yotov_db_disconnect_ <- function(environment = yotover_cache) {
   db <- mget("yotov_db", envir = yotover_cache, ifnotfound = NA)[[1]]
   if (inherits(db, "DBIConnection")) {
     DBI::dbDisconnect(db, shutdown = TRUE)
-    duckdb::duckdb_shutdown(duckdb::duckdb())
   }
   observer <- getOption("connectionObserver")
   if (!is.null(observer)) {

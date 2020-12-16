@@ -4,11 +4,11 @@
 #' clustered standard errors and RESET test.
 #'
 #' @param formula A formula for the model
-#' @param method Regression method (lm or glm)
 #' @param data A tibble or data.frame
+#' @param method Regression method (lm or glm)
 #' @export
 
-yotov_model_summary <- function(formula, method, data) {
+yotov_model_summary <- function(formula, data, method) {
   stopifnot(any(method %in% c("lm", "glm")))
 
   pair <- "pair_id" # linking variable
@@ -20,7 +20,7 @@ yotov_model_summary <- function(formula, method, data) {
   }
   if (method == "glm") {
     fit <- stats::glm(stats::as.formula(formula), family = stats::quasipoisson(link = "log"),
-               data = data)
+                      data = data)
   }
 
   is_ppml <- any(class(fit) %in% "glm")
@@ -28,7 +28,7 @@ yotov_model_summary <- function(formula, method, data) {
   contains_etfe <- any(grepl(paste0("^", etfe), names(fit$coefficients)))
   contains_itfe <- any(grepl(paste0("^", itfe), names(fit$coefficients)))
 
-  vcov_cluster <- multiwayvcov::cluster.vcov(
+  vcov_cluster <- sandwich::vcovCL(
     fit,
     cluster = data[, pair],
     df_correction = TRUE
@@ -49,9 +49,9 @@ yotov_model_summary <- function(formula, method, data) {
     data$predict2 <- (stats::predict(fit))^2 # Get fitted values of the linear index, not of trade
     form_reset <- stats::update(fit$formula, ~ predict2 + .)
     fit_reset <- stats::glm(form_reset,
-                     family = stats::quasipoisson(link = "log"),
-                     data = data)
-    vcov_cluster_reset <- multiwayvcov::cluster.vcov(
+                            family = stats::quasipoisson(link = "log"),
+                            data = data)
+    vcov_cluster_reset <- sandwich::vcovCL(
       fit_reset,
       cluster = data[, pair],
       df_correction = FALSE
@@ -60,9 +60,8 @@ yotov_model_summary <- function(formula, method, data) {
     res <- res[2,4]
 
     # r2: http://personal.lse.ac.uk/tenreyro/r2.do
-    data$fitted <- fit$fitted.values
     actual <- as.numeric(data$trade)
-    predicted <- as.numeric(data$fitted)
+    predicted <- as.numeric(fit$fitted.values)
     r2 <- (stats::cor(actual, predicted, method = "kendall"))^2 # kendall mimics stata
   } else {
     res <- lmtest::resettest(fit, power = 2)$p.value
@@ -86,11 +85,11 @@ yotov_model_summary <- function(formula, method, data) {
 #' clustered standard errors and delta method for percent change in log.
 #'
 #' @param formula A formula for the model
-#' @param method Regression method (lm or glm)
 #' @param data A tibble or data.frame
+#' @param method Regression method (lm or glm)
 #' @export
 
-yotov_model_summary2 <- function(formula, method, data) {
+yotov_model_summary2 <- function(formula, data, method) {
   stopifnot(any(method %in% c("lm", "glm")))
 
   pair <- "pair_id" # linking variable
@@ -105,13 +104,13 @@ yotov_model_summary2 <- function(formula, method, data) {
   }
   if (method == "glm") {
     fit <- stats::glm(stats::as.formula(formula), family = stats::quasipoisson(link = "log"),
-               data = data)
+                      data = data)
   }
 
   contains_intr <- any(grepl(paste0("^", intr, "|^", csfe), names(fit$coefficients)))
   contains_csfe <- any(grepl(paste0("^", csfe), names(fit$coefficients)))
 
-  vcov_cluster <- multiwayvcov::cluster.vcov(
+  vcov_cluster <- sandwich::vcovCL(
     fit,
     cluster = data[, pair],
     df_correction = TRUE
@@ -168,11 +167,11 @@ yotov_model_summary2 <- function(formula, method, data) {
 #' clustered standard errors and delta method for percent change in log.
 #'
 #' @param formula A formula for the model
-#' @param method Regression method (lm or glm)
 #' @param data A tibble or data.frame
+#' @param method Regression method (lm or glm)
 #' @export
 
-yotov_model_summary3 <- function(formula, method, data) {
+yotov_model_summary3 <- function(formula, data, method) {
   stopifnot(any(method %in% c("lm", "glm")))
 
   pair <- "pair_id" # linking variable
@@ -188,13 +187,13 @@ yotov_model_summary3 <- function(formula, method, data) {
   }
   if (method == "glm") {
     fit <- stats::glm(stats::as.formula(formula), family = stats::quasipoisson(link = "log"),
-               data = data)
+                      data = data)
   }
 
   contains_intr <- any(grepl(paste0("^", intr, "|^", brdr, "|^", pair2),
                              names(fit$coefficients)))
 
-  vcov_cluster <- multiwayvcov::cluster.vcov(
+  vcov_cluster <- sandwich::vcovCL(
     fit,
     cluster = data[, pair],
     df_correction = TRUE
@@ -218,8 +217,8 @@ yotov_model_summary3 <- function(formula, method, data) {
     coef_test <- broom::tidy(fit) %>%
       dplyr::filter(
         !grepl(paste0("^", etfe, "|^", itfe, "|^", brdr, "|^", pair2),
-        term
-      ))
+               term
+        ))
   }
 
   beta_rta <- fit$coefficients[grepl("^rta", names(fit$coefficients))]
