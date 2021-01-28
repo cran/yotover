@@ -1,26 +1,34 @@
 #' Traditional Gravity Estimates Reporting Style
 #'
 #' Computes clustered standard errors, tests on coefficients with
-#' clustered standard errors and RESET test.
+#' clustered standard errors and obtains RESET test p-value.
 #'
 #' @param formula A formula for the model
 #' @param data A tibble or data.frame
-#' @param method Regression method (lm or glm)
+#' @param method Regression method, which can be "lm" (default) or "glm"
+#' @param pair Inter-national fixed effects column (defaults to "pair_id")
+#' @param etfe Exporter time fixed effects column (defaults to "exp_year")
+#' @param itfe Importer time fixed effects column (defaults to "imp_year")
 #' @export
 
-yotov_model_summary <- function(formula, data, method) {
+yotov_model_summary <- function(formula, data, method = "lm", pair = "pair_id",
+                                etfe = "exp_year", itfe = "imp_year") {
   stopifnot(any(method %in% c("lm", "glm")))
 
-  pair <- "pair_id" # linking variable
-  etfe <- "exp_year" # exporter time fixed effects column
-  itfe <- "imp_year" # importer time fixed effects column
+  if (!all(class(data) %in% "data.frame")) {
+    data <- as.data.frame(data)
+  }
 
   if (method == "lm") {
     fit <- stats::lm(stats::as.formula(formula), data = data)
   }
   if (method == "glm") {
-    fit <- stats::glm(stats::as.formula(formula), family = stats::quasipoisson(link = "log"),
-                      data = data)
+    fit <- stats::glm(stats::as.formula(formula),
+      family = stats::quasipoisson(link = "log"),
+      data = data,
+      y = FALSE,
+      model = FALSE
+    )
   }
 
   is_ppml <- any(class(fit) %in% "glm")
@@ -30,8 +38,7 @@ yotov_model_summary <- function(formula, data, method) {
 
   vcov_cluster <- sandwich::vcovCL(
     fit,
-    cluster = data[, pair],
-    df_correction = TRUE
+    cluster = data[, pair]
   )
 
   coef_test <- lmtest::coeftest(
@@ -49,15 +56,17 @@ yotov_model_summary <- function(formula, data, method) {
     data$predict2 <- (stats::predict(fit))^2 # Get fitted values of the linear index, not of trade
     form_reset <- stats::update(fit$formula, ~ predict2 + .)
     fit_reset <- stats::glm(form_reset,
-                            family = stats::quasipoisson(link = "log"),
-                            data = data)
+      family = stats::quasipoisson(link = "log"),
+      data = data,
+      y = FALSE,
+      model = FALSE
+    )
     vcov_cluster_reset <- sandwich::vcovCL(
       fit_reset,
-      cluster = data[, pair],
-      df_correction = FALSE
+      cluster = data[, pair]
     )
     res <- lmtest::coeftest(fit_reset, vcov_cluster_reset)
-    res <- res[2,4]
+    res <- res[2, 4]
 
     # r2: http://personal.lse.ac.uk/tenreyro/r2.do
     actual <- as.numeric(data$trade)
@@ -82,29 +91,40 @@ yotov_model_summary <- function(formula, data, method) {
 #' The "Distance Puzzle" Resolved Reporting Style
 #'
 #' Computes clustered standard errors, tests on coefficients with
-#' clustered standard errors and delta method for percent change in log.
+#' clustered standard errors and uses the delta method to obtain changes in
+#' time-based distance estimated coefficients.
 #'
 #' @param formula A formula for the model
 #' @param data A tibble or data.frame
 #' @param method Regression method (lm or glm)
+#' @param pair Inter-national fixed effects column (defaults to "pair_id")
+#' @param etfe Exporter time fixed effects column (defaults to "exp_year")
+#' @param itfe Importer time fixed effects column (defaults to "imp_year")
+#' @param dist Distance column (defaults to "log_dist")
+#' @param intr Intra-national distance column (defaults to "log_dist_intra")
+#' @param csfe Country-specific fixed effects (defaults to "intra_pair")
 #' @export
 
-yotov_model_summary2 <- function(formula, data, method) {
+yotov_model_summary2 <- function(formula, data, method = "lm",
+                                 pair = "pair_id", etfe = "exp_year",
+                                 itfe = "imp_year", dist = "log_dist",
+                                 intr = "log_dist_intra", csfe = "intra_pair") {
   stopifnot(any(method %in% c("lm", "glm")))
 
-  pair <- "pair_id" # linking variable
-  etfe <- "exp_year" # exporter time fixed effects
-  itfe <- "imp_year" # importer time fixed effects
-  dist <- "log_dist" # pattern of the distance terms fixed effects
-  intr <- "log_dist_intra" # intra-national distance
-  csfe <- "intra_pair" # intra-national fixed effects
+  if (!all(class(data) %in% "data.frame")) {
+    data <- as.data.frame(data)
+  }
 
   if (method == "lm") {
     fit <- stats::lm(stats::as.formula(formula), data = data)
   }
   if (method == "glm") {
-    fit <- stats::glm(stats::as.formula(formula), family = stats::quasipoisson(link = "log"),
-                      data = data)
+    fit <- stats::glm(stats::as.formula(formula),
+      family = stats::quasipoisson(link = "log"),
+      data = data,
+      y = FALSE,
+      model = FALSE
+    )
   }
 
   contains_intr <- any(grepl(paste0("^", intr, "|^", csfe), names(fit$coefficients)))
@@ -112,8 +132,7 @@ yotov_model_summary2 <- function(formula, data, method) {
 
   vcov_cluster <- sandwich::vcovCL(
     fit,
-    cluster = data[, pair],
-    df_correction = TRUE
+    cluster = data[, pair]
   )
 
   coef_test <- lmtest::coeftest(
@@ -127,8 +146,9 @@ yotov_model_summary2 <- function(formula, data, method) {
   coef_test <- broom::tidy(coef_test)
 
   beta_log_dist <- grep(intr,
-                        grep(dist, coef_test$term, value = TRUE),
-                        value = TRUE, invert = TRUE)
+    grep(dist, coef_test$term, value = TRUE),
+    value = TRUE, invert = TRUE
+  )
   beta_log_dist <- c(min(beta_log_dist), max(beta_log_dist))
 
   # change = 100 * (beta2 - beta1) / beta1
@@ -142,8 +162,10 @@ yotov_model_summary2 <- function(formula, data, method) {
 
   beta_pct_chg <- as.numeric(100 * (beta2 - beta1) / beta1)
 
-  beta_std_err <- msm::deltamethod(~ 100 * (x2 - x1) / x1,
-                                   c(beta1, beta2), beta_vcov_cluster)
+  beta_std_err <- msm::deltamethod(
+    ~ 100 * (x2 - x1) / x1,
+    c(beta1, beta2), beta_vcov_cluster
+  )
 
   beta_tstat <- beta_pct_chg / beta_std_err
   beta_pval <- stats::pnorm(-abs(beta_tstat)) + (1 - stats::pnorm(abs(beta_tstat)))
@@ -164,46 +186,63 @@ yotov_model_summary2 <- function(formula, data, method) {
 #' Regional Trade Agreements Effects Reporting Style
 #'
 #' Computes clustered standard errors, tests on coefficients with
-#' clustered standard errors and delta method for percent change in log.
+#' clustered standard errors and returns total RTAs effect with its associated
+#' standard error.
 #'
 #' @param formula A formula for the model
 #' @param data A tibble or data.frame
-#' @param method Regression method (lm or glm)
+#' @param method Regression method, which can be "lm" (default) or "glm"
+#' @param pair Inter-national fixed effects column (defaults to "pair_id")
+#' @param pair2 Intra-national fixed effects column (defaults to "pair_id_2")
+#' @param etfe Exporter time fixed effects column (defaults to "exp_year")
+#' @param itfe Importer time fixed effects column (defaults to "imp_year")
+#' @param dist Distance column (defaults to "log_dist")
+#' @param intr Intra-national distance column (defaults to "log_dist_intra")
+#' @param brdr Inter-national borders column (defaults to "intl_brdr")
 #' @export
 
-yotov_model_summary3 <- function(formula, data, method) {
+yotov_model_summary3 <- function(formula, data, method = "lm",
+                                 pair = "pair_id", pair2 = "pair_id_2",
+                                 etfe = "exp_year", itfe = "imp_year",
+                                 dist = "log_dist", intr = "log_dist_intra",
+                                 brdr = "intl_brdr") {
   stopifnot(any(method %in% c("lm", "glm")))
 
-  pair <- "pair_id" # linking variable
-  pair2 <- "pair_id_2" # linking variable for intra-national effects
-  etfe <- "exp_year" # exporter time fixed effects
-  itfe <- "imp_year" # importer time fixed effects
-  dist <- "log_dist" # distance terms fixed effects
-  intr <- "log_dist_intra" # intra-national distance
-  brdr <- "intl_brdr" # international border
+  if (!all(class(data) %in% "data.frame")) {
+    data <- as.data.frame(data)
+  }
 
   if (method == "lm") {
     fit <- stats::lm(stats::as.formula(formula), data = data)
   }
   if (method == "glm") {
-    fit <- stats::glm(stats::as.formula(formula), family = stats::quasipoisson(link = "log"),
-                      data = data)
+    fit <- stats::glm(stats::as.formula(formula),
+      family = stats::quasipoisson(link = "log"),
+      data = data,
+      y = FALSE,
+      model = FALSE
+    )
   }
 
-  contains_intr <- any(grepl(paste0("^", intr, "|^", brdr, "|^", pair2),
-                             names(fit$coefficients)))
+  contains_intr <- any(grepl(
+    paste0("^", intr, "|^", brdr, "|^", pair2),
+    names(fit$coefficients)
+  ))
 
   vcov_cluster <- sandwich::vcovCL(
     fit,
-    cluster = data[, pair],
-    df_correction = TRUE
+    cluster = data[, pair]
   )
 
   vcov_cluster_reduced <- vcov_cluster[
-    which(!grepl(paste0("^", etfe, "|^", itfe, "|^", brdr, "|^", pair2),
-                 rownames(vcov_cluster))),
-    which(!grepl(paste0("^", etfe, "|^", itfe, "|^", brdr, "|^", pair2),
-                 rownames(vcov_cluster)))
+    which(!grepl(
+      paste0("^", etfe, "|^", itfe, "|^", brdr, "|^", pair2),
+      rownames(vcov_cluster)
+    )),
+    which(!grepl(
+      paste0("^", etfe, "|^", itfe, "|^", brdr, "|^", pair2),
+      rownames(vcov_cluster)
+    ))
   ]
 
   if (!is.null(dim(vcov_cluster_reduced))) {
@@ -216,9 +255,11 @@ yotov_model_summary3 <- function(formula, data, method) {
   } else {
     coef_test <- broom::tidy(fit) %>%
       dplyr::filter(
-        !grepl(paste0("^", etfe, "|^", itfe, "|^", brdr, "|^", pair2),
-               term
-        ))
+        !grepl(
+          paste0("^", etfe, "|^", itfe, "|^", brdr, "|^", pair2),
+          term
+        )
+      )
   }
 
   beta_rta <- fit$coefficients[grepl("^rta", names(fit$coefficients))]

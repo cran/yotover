@@ -1,4 +1,4 @@
-#' GLM Regression With Robust Clustered Standard Errors
+#' GLM Regression With Clustered Standard Errors
 #'
 #' Fits a regression with robust clustered standard errors. This uses a quasi-poisson
 #' family and returns the estimated coefficients after computing a clustered
@@ -6,23 +6,24 @@
 #'
 #' @param formula A formula for the model
 #' @param data A tibble or data.frame
+#' @param pair Inter-national fixed effects column (defaults to "pair_id")
+#' @param fe_pattern A pattern for the fixed effects variable, allows character or regex (defaults to "^exporter|^importer")
 #' @export
 
-yotov_robust_glm <- function(formula, data) {
-  pair <- "pair_id" # linking variable
-
-  fit <- stats::glm(stats::as.formula(formula), family = stats::quasipoisson(link = "log"),
-                    data = data)
+yotov_clustered_glm <- function(formula, data, pair = "pair_id", fe_pattern = "^exporter|^importer") {
+  fit <- stats::glm(stats::as.formula(formula),
+    family = stats::quasipoisson(link = "log"),
+    data = data
+  )
 
   vcov_cluster <- sandwich::vcovCL(
     fit,
-    cluster = data[, pair],
-    df_correction = TRUE
+    cluster = data[, pair]
   )
 
   vcov_cluster_reduced <- vcov_cluster[
-    which(!grepl("^exporter|^importer", rownames(vcov_cluster))),
-    which(!grepl("^exporter|^importer", rownames(vcov_cluster)))
+    which(!grepl(fe_pattern, rownames(vcov_cluster))),
+    which(!grepl(fe_pattern, rownames(vcov_cluster)))
   ]
 
   coef_test <- lmtest::coeftest(
@@ -90,7 +91,9 @@ yotov_fixed_effects <- function(fit) {
     )
   }
 
-  d <- dplyr::mutate_if(d, is.numeric, function(x) { ifelse(is.na(x), 0, x) })
+  d <- dplyr::mutate_if(d, is.numeric, function(x) {
+    ifelse(is.na(x), 0, x)
+  })
 
   return(d)
 }
